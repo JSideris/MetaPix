@@ -1,0 +1,46 @@
+PI=3.147159
+CaseMat = LambertMat
+    Color 0x770000
+PageMat = PhysicalMat
+    Color 0xFFDDBB
+    Reflectivity 1
+    Skinning false
+WireframePageMat = PhysicalMat
+    Color 0xAA8866
+    Wireframe true
+
+Group
+    Material CaseMat
+    Box 0.03, 0.005, 0.3
+    Box 0.20, 0.005, 0.3
+        Pos (0.2+0.03)/2, -0.005, 0
+        RotZ -0.1
+    Box 0.20, 0.005, 0.3
+        Pos -(0.2+0.03)/2, -0.005, 0
+        RotZ 0.1
+
+Group
+    Material PageMat
+    Array i, 10
+        r = (Math.random()-0.5)/100
+        Plane 0.19,0.29
+            Pos -0.1+r,i/200,0
+            RotX -PI/2
+            RotY -i/100
+        Plane 0.19,0.29
+            Material WireframePageMat
+            Pos -0.1+r,i/200-0.001,0
+            RotX -PI/2
+            RotY -i/100
+    Array i, 10
+        r = (Math.random()-0.5)/100
+        Plane 0.19,0.29
+            Pos 0.1+r,i/200,0
+            RotX -PI/2
+            RotY i/100
+        Plane 0.19,0.29
+            Material WireframePageMat
+            Pos 0.1+r,i/200-0.001,0
+            RotX -PI/2
+            RotY i/100
+            

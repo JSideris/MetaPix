@@ -125,6 +125,7 @@ class MetaPixCommand{
 
 	
 	var gfxFunctions = [
+		// GfxMethods
 		["Arc", "arc", ["cx", "cy", "radius", "startAngle", "endAngle"], ["anticlockwise"]],
 		["ArcTo", "arcTo", ["x1", "y1", "x2", "y2", "radius"], []],
 		["BeginFill", "beginFill", [], ["color", "alpha"]],
@@ -138,6 +139,7 @@ class MetaPixCommand{
 		["LineTo", "lineTo", ["x", "y"], []],
 		["MoveTo", "moveTo", ["x", "y"], []],
 
+		// Drawing Methods
 		["DrawCircle", "drawCircle", ["x", "y", "radius"], []],
 		["DrawEllipse", "drawEllipse", ["x", "y", "width", "height"], []],
 		["DrawPolygon", "drawPolygon", ["path"], []],
@@ -145,6 +147,8 @@ class MetaPixCommand{
 		["DrawRoundedRect", "drawRoundedRect", ["x", "y", "width", "height", "radius"], []],
 		["DrawStar", "drawStar", ["x", "y", "points", "radius"], ["innerRadius", "rotation"]],
 	];
+
+	
 
 	for(let i = 0; i < gfxFunctions.length; i++){
 		let command = gfxFunctions[i];
@@ -159,7 +163,7 @@ class MetaPixCommand{
 
 			}
 
-			node.relevantContainer = node;
+			//node.relevantContainer = node;
 		}, (node) => {
 			var ret = "";
 			//ret += node.indentChars + "" + node.parent.name + ".beginFill(0xe74c3c); // Red\r\n"
@@ -186,6 +190,38 @@ class MetaPixCommand{
 			}
 
 			ret += `${node.indentChars}${node.parent.name}.${command[1]}( ${node.args.join(", ")} );\r\n`
+	
+			return ret;
+		}, null/*GeometryCommandClose*/);
+	}
+
+	
+	var gfxAndContainerProps = [
+		// GfxMethods
+		["Rotate", "rotation", "angle"],
+	];
+
+	for(let i = 0; i < gfxAndContainerProps.length; i++){
+		let command = gfxAndContainerProps[i];
+		new MetaPixCommand(command[0], (node) => {
+			//node.relevantContainer = node;
+			if(!node.relevantContainer || !node.parent.isGraphics && !node.parent.isContainer){
+				//if(!this.parent.isGeometry && !this.parent.isContainer && !this.parent.isModifier && !this.parent.isFlowControl){
+				throwError(node.block.lineNumber, 0, `The ${command[0]} command must be nested in a Graphics or Container object.`, node.block.creationLine);
+			}
+			if(node.args.length != 1){
+				//if(!this.parent.isGeometry && !this.parent.isContainer && !this.parent.isModifier && !this.parent.isFlowControl){
+				throwError(node.block.lineNumber, 0, `The ${command[0]} command takes one argument of ${command[2]} type.`, node.block.creationLine);
+			}
+		}, (node) => {
+			var ret = "";
+			//ret += node.indentChars + "" + node.parent.name + ".beginFill(0xe74c3c); // Red\r\n"
+
+			if(command[2] == "angle"){
+				node.args[0] = "" + (Number(node.args[0]) * Math.PI / 180);
+			}
+
+			ret += `${node.indentChars}${node.parent.name}.${command[1]} = ${node.args[0]};\r\n`
 	
 			return ret;
 		}, null/*GeometryCommandClose*/);

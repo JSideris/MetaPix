@@ -125,7 +125,7 @@ var config = {
 	updateRefreshEditor();
 }
 
-{// Pixi stuff.
+{// Pixi stuff. 
 
 
 	var pixiApp = new PIXI.Application({

@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "webpack-dev-server --config ./webpack.dev.js --open --host 127.0.0.1"
+	"start": "webpack-dev-server --config ./webpack.dev.js --open --host 127.0.0.1",
+	"build": "webpack --config ./webpack.dev.js"
   },
   "author": "",
   "license": "ISC",

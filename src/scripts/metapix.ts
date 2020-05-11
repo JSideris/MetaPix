@@ -163,6 +163,14 @@ class MetaPixCommand{
 		}, (node) => {
 			var ret = "";
 			//ret += node.indentChars + "" + node.parent.name + ".beginFill(0xe74c3c); // Red\r\n"
+			switch(command[1]){
+				case "drawRect":
+				case "drawRoundedRect":
+					node.args[0] = "" + (Number(node.args[0]) - Number(node.args[2]) / 2);
+					node.args[1] = "" + (Number(node.args[1]) - Number(node.args[3]) / 2);
+					break;
+			}
+
 			ret += `${node.indentChars}${node.parent.name}.${command[1]}( ${node.args.join(", ")} );\r\n`
 	
 			return ret;

@@ -68,8 +68,8 @@ export default class MetaPix{
 
 		var codeTree = new PixiNode(topLevelBlock, null);
 		//codeTree.allMaterials.push(new Material("MeshBasic", null, null, null));
-
 		output.push(codeTree.toJs(null) + indent + "return " + codeTree.name + ";");
+		//output.push(`container0.cacheAsBitmap = true;`);
 		// output.push("var geometry = new THREE.BoxBufferGeometry( 200, 200, 200 );")
 		// output.push("var material = new THREE.MeshPhysicalMaterial( { color: 0xFF0000 } );")
 		// output.push("var object = new THREE.Mesh( geometry, material );")
@@ -163,11 +163,25 @@ class MetaPixCommand{
 		}, (node) => {
 			var ret = "";
 			//ret += node.indentChars + "" + node.parent.name + ".beginFill(0xe74c3c); // Red\r\n"
+
+			// Center rects.
 			switch(command[1]){
 				case "drawRect":
 				case "drawRoundedRect":
 					node.args[0] = "" + (Number(node.args[0]) - Number(node.args[2]) / 2);
 					node.args[1] = "" + (Number(node.args[1]) - Number(node.args[3]) / 2);
+					break;
+			}
+
+			// Rads to degs.
+			switch(command[1]){
+				case "arc":
+					node.args[3] = "" + (Number(node.args[3]) * Math.PI / 180);
+					node.args[4] = "" + (Number(node.args[4]) * Math.PI / 180);
+					break;
+				case "drawStar":
+					if(node.args.length > 5)
+					node.args[5] = "" + (Number(node.args[5]) * Math.PI / 180);
 					break;
 			}
 

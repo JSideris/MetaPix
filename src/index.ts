@@ -15,15 +15,87 @@ var metaPix = new MetaPix();
 var config = {
 	editorWidth: 0.3,
 	viewerHeight: 0.6,
-	lastScript: localStorage.getItem("lastScript") || ""
+	lastSave: localStorage.getItem("last-save") || "",
+	allSaves: JSON.parse(localStorage.getItem("all-saves") || "[]"),
+	bgMode: 0
+};
+
+function loadLastSave(){
+	let save = localStorage.getItem("save-" + config.lastSave) || "";
+	editor.setValue(save);
+
+	$("#new-save-name").val(config.lastSave);
+	// config.lastSave = save;
+	// localStorage.setItem("last-save", save);
+}
+
+let loadBtnId = 0;
+function loadbtn(saveName){
+	let currentBtnId = ++loadBtnId;
+	dot("#saves").table(dot.tr(dot.td(
+		dot.button(saveName).style(dotcss.widthP(100)).onclick(()=>{
+			config.lastSave = saveName;
+			localStorage.setItem("last-save", saveName);
+			loadLastSave();
+		})
+	)
+	.td(
+		dot.button("x").onclick(()=>{
+			config.allSaves.splice(config.allSaves.indexOf(saveName), 1);
+			localStorage.setItem("all-saves", JSON.stringify(config.allSaves));
+
+			localStorage.removeItem("save-" + saveName);
+			let tbl = document.getElementById("tbl-save-" + currentBtnId);
+			tbl.parentElement.removeChild(tbl);
+
+		})
+	).style(dotcss.width(30)))).id("tbl-save-" + currentBtnId).style(dotcss.widthP(100))
 };
 
 {//UI
 	dot("body")
 	.div(
 		dot.div().id("editor")
+		.div(
+			dot("#saves").button("New").style(dotcss.widthP(100)).onclick(()=>{
+				config.lastSave = "";
+				$("#new-save-name").val("")
+				loadLastSave();
+			})
+			.table(dot.tr(dot.td(
+				dot.input().id("new-save-name").placeholder("save-name").style(dotcss.widthP(100))
+				)
+				.td(
+					dot.button("Save").style(dotcss.widthP(100)).onclick(()=>{
+						let name = $("#new-save-name").val();
+						config.lastSave = name;
+						localStorage.setItem("last-save", name);
+						let scriptValue = editor.getValue();
+						localStorage.setItem("save-" + name, scriptValue);
+						config.allSaves.push(name);
+						localStorage.setItem("all-saves", JSON.stringify(config.allSaves));
+						loadbtn(name);
+					})
+				).style(dotcss.width(80)))).style(dotcss.widthP(100))
+		).id("saves")
 	).id("code-editor-div").class("main-pane")
-	.div().id("preview-div").class("main-pane")
+	.div(
+		dot.button("").id("bg-color-toggle").style(dotcss.position("absolute").width(30).height(30).color("white")).onclick(()=>{
+			config.bgMode = (config.bgMode + 1) % 2;
+			switch(config.bgMode){
+				case 0: {
+					dotcss("#bg-color-toggle").backgroundColor("white");
+					pixiApp.renderer.backgroundColor = 0x0;
+					break;
+				}
+				case 1: {
+					dotcss("#bg-color-toggle").backgroundColor("black");
+					pixiApp.renderer.backgroundColor = 0xFFFFFF;
+					break;
+				}
+			}
+		})
+	).id("preview-div").class("main-pane")
 	//.div().id("animation-div")//.class("")
 	// .div(
 	// 	dot.div().id("list-of-saves")
@@ -31,12 +103,17 @@ var config = {
 	.div(
 		dot.div().id("output-code-viewer")
 	).id("js-code-div").class("main-pane")
-	.pre().id("js-code-error-div").class("main-pane").style(dotcss.display("none"))
+	.pre().id("js-code-error-div").class("main-pane").style(dotcss.display("none"));
+	
+	dot.each(config.allSaves, s => {
+		loadbtn(s);
+	});
 }
+
 
 {//Editors
 	var editor = ace.edit("editor");
-	editor.setValue(config.lastScript);
+	loadLastSave();
 	var outputCodeViewer = ace.edit("output-code-viewer", {/*mode: "ace/mode/javascript",*/ readOnly: true});
 	var maxRefreshCountdownTime = 0.1;
 	editor.on("change", function(){
@@ -63,9 +140,9 @@ var config = {
 					allAnimations = {};
 
 					// Process script.
-					config.lastScript = editor.getValue();
-					localStorage.setItem("lastScript", config.lastScript);
-					var code = metaPix.transpile(config.lastScript);
+					let scriptValue = editor.getValue();
+					if(config.lastSave) localStorage.setItem("save-" + config.lastSave, scriptValue);
+					var code = metaPix.transpile(scriptValue);
 					outputCodeViewer.setValue(code);
 					outputCodeViewer.clearSelection();
 					reset();
@@ -198,6 +275,6 @@ function onDocumentMouseMove( event ) {
 	// mouseY = ( event.clientY - windowHalfY ) / 2;
 }
 
-window.addEventListener( 'resize', windowResize, false );
+window.addEventListener( "resize", windowResize, false );
 //document.addEventListener( 'mousemove', onDocumentMouseMove, false );
 windowResize();

@@ -72,9 +72,11 @@ function loadbtn(saveName){
 						localStorage.setItem("last-save", name);
 						let scriptValue = editor.getValue();
 						localStorage.setItem("save-" + name, scriptValue);
-						config.allSaves.push(name);
-						localStorage.setItem("all-saves", JSON.stringify(config.allSaves));
-						loadbtn(name);
+						if(config.allSaves.indexOf(name) == -1){
+							config.allSaves.push(name);
+							localStorage.setItem("all-saves", JSON.stringify(config.allSaves));
+							loadbtn(name);
+						}
 					})
 				).style(dotcss.width(80)))).style(dotcss.widthP(100))
 		).id("saves")

@@ -14,7 +14,7 @@ var metaPix = new MetaPix();
 
 var config = {
 	editorWidth: 0.3,
-	viewerHeight: 0.6,
+	viewerHeight: 0.9,
 	lastSave: localStorage.getItem("last-save") || "",
 	allSaves: JSON.parse(localStorage.getItem("all-saves") || "[]"),
 	bgMode: 0
@@ -226,6 +226,23 @@ function loadbtn(saveName){
 	
 	
 	var canvas = pixiApp.view;
+	var canvasScale = 1;
+	canvas.onwheel = e =>{
+		if(e.deltaY < 0){
+			canvasScale /= 0.9;
+		}
+		else if(e.deltaY > 0){
+			canvasScale *= 0.9;
+		}
+		pixiView.scale.set(canvasScale,canvasScale);
+	}
+
+	canvas.onmousemove = e => {
+		if(e.buttons){
+			pixiView.position.set(pixiView.position.x + e.movementX, pixiView.position.y + e.movementY);
+			middleGfx.position.set(pixiView.position.x + e.movementX, pixiView.position.y + e.movementY);
+		}
+	}
 	// canvas.style.display = "block";
 
 	var container = document.getElementById( 'preview-div' );

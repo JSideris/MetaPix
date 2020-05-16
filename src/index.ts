@@ -1,7 +1,7 @@
 
 import dot from "./scripts/lib/dothtml.js";
 import dotcss from "./scripts/lib/dotcss.js";
-import ace from 'ace-builds'
+import ace, { edit } from 'ace-builds'
 import * as PIXI from "pixi.js";
 import $ from "jquery";
 
@@ -115,12 +115,26 @@ function loadbtn(saveName){
 
 {//Editors
 	var editor = ace.edit("editor");
+	var selectedLine = -1;
 	loadLastSave();
 	var outputCodeViewer = ace.edit("output-code-viewer", {/*mode: "ace/mode/javascript",*/ readOnly: true});
 	var maxRefreshCountdownTime = 0.1;
 	editor.on("change", function(){
 		refreshCountdown = maxRefreshCountdownTime;
 	});
+	editor.selection.on("changeCursor", function(e){
+		let selectionRange = editor.getSelectionRange();
+		let startLine = selectionRange.start.row;
+		let endLine = selectionRange.end.row;
+		let selectedLine2 = startLine == endLine ? startLine : -1;
+		if(selectedLine != selectedLine2){
+			selectedLine = selectedLine2;
+			refreshCountdown = maxRefreshCountdownTime;
+		}
+	});
+	// .on(, function(){
+	// 	refreshCountdown = maxRefreshCountdownTime;
+	// });
 
 	var refreshCountdown = 0.2;
 	var errorState = false;
@@ -144,7 +158,8 @@ function loadbtn(saveName){
 					// Process script.
 					let scriptValue = editor.getValue();
 					if(config.lastSave) localStorage.setItem("save-" + config.lastSave, scriptValue);
-					var code = metaPix.transpile(scriptValue);
+
+					var code = metaPix.transpile(scriptValue, selectedLine + 1);
 					outputCodeViewer.setValue(code);
 					outputCodeViewer.clearSelection();
 					reset();

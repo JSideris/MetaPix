@@ -3,7 +3,7 @@
 export default class MetaPix{
 	constructor(){}
 
-	transpile(code){
+	transpile(code: string, selectedLine: number): string{
 		polygonNumbs = 1;
 		materialNumbs = 1;
 		groupNumbs = 1;
@@ -16,14 +16,16 @@ export default class MetaPix{
 		output.push("var generate = function(){");
 		//output.push("    var defaultMaterial = new THREE.MeshStandardMaterial({color: 0xFF00FF});");
 		output.push("    var container0 = new PIXI.Container();");
-		var lines = code.split("\n");
-
-		var parentBlock = new Block(null);
+		
+		var parentBlock = new Block(null, null, 0, false);
 		var topLevelBlock = parentBlock;
 		var lastBlock = null;
 		//var indentationStack = [];
 		//indentationStack.push(0);
 		//console.log("Building.");
+		
+		// Transpile each line.
+		var lines = code.split("\n");
 		for(var i = 0; i < lines.length; i++){
 			var fullLine = lines[i].split("#")[0];
 			var indentation = getIndentation(fullLine);
@@ -37,9 +39,7 @@ export default class MetaPix{
 				throwError(i+1,0,"Can't switch from " + globalIndentationType + " to " + indentation.type + ".", fullLine);
 			}
 
-			var thisBlock = new Block(indentation);
-			thisBlock.creationLine = fullLine;
-			thisBlock.lineNumber = i + 1;
+			var thisBlock = new Block(indentation, fullLine, i+1, selectedLine == i + 1);
 			if(!lastBlock || lastBlock.indentation.level == indentation.level){
 				lastBlock = thisBlock;
 			}
@@ -81,18 +81,18 @@ export default class MetaPix{
 }
 
 class Block {
-	parent: any;
-	creationLine: any;
-	lineNumber: number;
-	children: Block[];
+	parent: Block = null;
+	creationLine: string = null;
+	lineNumber: number = null;
+	children: Block[] = [];
 	indentation: { level: number; type: string; };
+	isSelected: boolean = false;
 	
-	constructor(indentation){
-		this.parent = null;
-		this.creationLine = null; 
-		this.lineNumber = null;
-		this.children = [];
+	constructor(indentation: { level: number; type: string; }, creationLine:string, lineNumber:number, isSelected:boolean){
 		this.indentation = indentation ?? {level: 0, type: "none"};
+		this.creationLine = creationLine;
+		this.lineNumber = lineNumber;
+		this.isSelected = isSelected;
 	}
 }
 
@@ -123,7 +123,48 @@ class MetaPixCommand{
 }
 
 
+	function validateCommand(node: PixiNode, name: string, requireParams: string[], optionalParams: string[], allowedParents: string[]){
+		if(
+			(allowedParents.indexOf("Graphics") == -1 && node.parent.isGraphics)
+			|| (allowedParents.indexOf("Container") == -1 && node.parent.isContainer)
+		){
+			let message = "";
+			if(allowedParents.length == 0) message = `${name} objects are not supported.`;
+			else if(allowedParents.length == 1) message = `${name} objects are only valid inside ${allowedParents[0] } objects.`;
+			else message = `${name} objects are only valid inside ${allowedParents.slice(0, allowedParents.length - 1).join(", ") } or ${allowedParents[allowedParents.length - 1]} objects.`;
+			
+			throwError(node.block.lineNumber, 0, message, node.block.creationLine);
+		}
+		
+		if(node.args.length < requireParams.length || node.args.length > requireParams.length + optionalParams.length){
+			throwError(node.block.lineNumber, 0, `Invalid usage. The ${name} command has ${requireParams.length} ${requireParams.length + optionalParams.length == 0 ? "" : "required "}parameters${requireParams.length > 0 ? ` (${(requireParams as string[]).join(", ")})`:``}${optionalParams.length > 0 ? `, and ${optionalParams.length} optional parameters (${(optionalParams as string[]).join(", ")})`:``}.`, node.block.creationLine);
+
+		}
+	}
 	
+	function drawBoundingBoxIfSelected(node: PixiNode){
+		if(node.block.isSelected){
+			return [
+				"",
+				`var _boundingBoxRect = new PIXI.Graphics();`, 
+				`_boundingBoxRect.lineStyle(1, 0x6666FF, 0.6);`, 
+				`_boundingBoxRect.drawShape(${node.name}.getBounds ? ${node.name}.getBounds() : ${node.name});`,
+				`container0.addChild(_boundingBoxRect)`, 
+				""
+			].join(`\r\n${node.indentChars}`);
+		}
+
+		return "";
+	}
+
+	function getNameWithPrefix(node: PixiNode, prefix: string){
+		if(!node.name) {
+			node.name = node.nextName(prefix);
+			if(node.allNames.indexOf(node.name) != -1) throwError(node.block.lineNumber, node.block.indentation.level, "The name `" + node.name + "` was declared twice.", node.block.creationLine);
+			node.allNames.push(node.name);
+		}
+	}
+
 	var gfxFunctions = [
 		// GfxMethods
 		["Arc", "arc", ["cx", "cy", "radius", "startAngle", "endAngle"], ["anticlockwise"]],
@@ -139,7 +180,7 @@ class MetaPixCommand{
 		["LineTo", "lineTo", ["x", "y"], []],
 		["MoveTo", "moveTo", ["x", "y"], []],
 
-		// Drawing Methods
+		// Drawing Methods (deprecated)
 		["DrawCircle", "drawCircle", ["x", "y", "radius"], []],
 		["DrawEllipse", "drawEllipse", ["x", "y", "width", "height"], []],
 		["DrawPolygon", "drawPolygon", ["path"], []],
@@ -148,20 +189,10 @@ class MetaPixCommand{
 		["DrawStar", "drawStar", ["x", "y", "points", "radius"], ["innerRadius", "rotation"]],
 	];
 
-	
-
 	for(let i = 0; i < gfxFunctions.length; i++){
 		let command = gfxFunctions[i];
 		new MetaPixCommand(command[0], (node) => {
-			if(!node.relevantContainer || !node.parent.isGraphics){
-			//if(!this.parent.isGeometry && !this.parent.isContainer && !this.parent.isModifier && !this.parent.isFlowControl){
-				throwError(node.block.lineNumber, 0, "Shapes must be nested in a Graphics object.", node.block.creationLine);
-			}
-			
-			if(node.args.length < command[2].length || node.args.length > command[2].length + command[3].length){
-				throwError(node.block.lineNumber, 0, `Invalid usage. The ${command[0]} has ${command[2].length} ${command[2].length + command[3].length == 0 ? "" : "required "}parameters${command[2].length > 0 ? ` (${(command[2] as string[]).join(", ")})`:``}${command[3].length > 0 ? `, and ${command[3].length} optional parameters (${(command[3] as string[]).join(", ")})`:``}.`, node.block.creationLine);
-
-			}
+			validateCommand(node, command[0] as string, command[2] as string[], command[3] as string[], ["Graphics"]);
 
 			//node.relevantContainer = node;
 		}, (node) => {
@@ -189,10 +220,63 @@ class MetaPixCommand{
 					break;
 			}
 
+			// generalized conversion to degrees:
+			// for(let a = 0; a < node.args[a].length; a++){
+			// 	if(command[1].indexOf(":angle") != -1){
+			// 		node.args[a] = "" + (Number(node.args[0]) * Math.PI / 180);
+			// 	}
+			// }
+
 			ret += `${node.indentChars}${node.parent.name}.${command[1]}( ${node.args.join(", ")} );\r\n`
 	
 			return ret;
 		}, null/*GeometryCommandClose*/);
+	}
+
+	var shapes = [
+		["Circle", "Circle", ["x", "y", "radius"], []],
+		["Ellipse", "Ellipse", ["x", "y", "width", "height"], []],
+		["Polygon", "Polygon", ["path"], []],
+		["Rect", "Rectangle", ["x", "y", "width", "height"], []],
+		["RoundedRect", "RoundedRectangle", ["x", "y", "width", "height", "radius"], []],
+		//["Star", "drawStar", ["x", "y", "points", "radius"], ["innerRadius", "rotation"]],
+	];
+
+	for(let i = 0; i < shapes.length; i++){
+		let command = shapes[i];
+		new MetaPixCommand(command[0], (node) => {
+
+			validateCommand(node, command[0] as string, command[2] as string[], command[3] as string[], ["Graphics"]);
+			node.isShape = true;
+			//node.relevantContainer = node;
+		}, (node) => {
+			var ret = "";
+			//ret += node.indentChars + "" + node.parent.name + ".beginFill(0xe74c3c); // Red\r\n"
+
+			getNameWithPrefix(node, "shape");
+			
+			// Center rects.
+			switch(command[1]){
+				case "Rectangle":
+				case "RoundedRectangle":
+					node.args[0] = "" + (Number(node.args[0]) - Number(node.args[2]) / 2);
+					node.args[1] = "" + (Number(node.args[1]) - Number(node.args[3]) / 2);
+					break;
+			}
+
+			ret += [
+				"",
+				`var ${node.name} = new PIXI.${command[1]}(${node.args.join(", ")});`,
+				`${node.parent.name}.drawShape( ${node.name} );`,
+				""
+			].join(`\r\n${node.indentChars}`);
+	
+			return ret;
+		}, node => {
+			let ret = "";
+			ret += drawBoundingBoxIfSelected(node);
+			return ret;
+		});
 	}
 
 	
@@ -205,6 +289,8 @@ class MetaPixCommand{
 		let command = gfxAndContainerProps[i];
 		new MetaPixCommand(command[0], (node) => {
 			//node.relevantContainer = node;
+			console.log(node);
+			validateCommand(node, command[0], [command[2]], [command[3]], ["Container", "Graphics"]);
 			if(!node.relevantContainer || !node.parent.isGraphics && !node.parent.isContainer){
 				//if(!this.parent.isGeometry && !this.parent.isContainer && !this.parent.isModifier && !this.parent.isFlowControl){
 				throwError(node.block.lineNumber, 0, `The ${command[0]} command must be nested in a Graphics or Container object.`, node.block.creationLine);
@@ -225,194 +311,6 @@ class MetaPixCommand{
 	
 			return ret;
 		}, null/*GeometryCommandClose*/);
-	}
-
-	// for(var i = 0; i < gfxFunctions.length; i++){
-	// 	var command = gfxFunctions[i];
-	// 	new MetaPixCommand(command, GeometryCommandParse, GeometryCommandRender, null/*GeometryCommandClose*/);
-	// }
-	
-
-	// var GeometryModifierCommandParse = function(node: PixiNode){
-	// 	//node.isGeometryModifier = true;
-	// 	//if(!node.parent.isGeometry && !node.parent.isContainer && !node.parent.isModifier && !node.parent.isFlowControl){
-	// 	if(!node.relevantContainer){
-	// 		throwError(node.block.lineNumber, 0, "Translations and transformations must be nested in geometry, groups, or modifiers.", node.block.creationLine);
-	// 	}
-	// }
-	// var GeometryModifierCommandRender = function(node: PixiNode){
-	// 	var ret = "";
-	// 	if(!node.relevantContainer){
-	// 		throwError(node.block.lineNumber, node.block.indentation.level, "No parent geometry or container found for modifier.", node.block.creationLine); // TODO: is this the correct last param? Use to be nul?
-	// 	}
-		
-	// 	switch(node.command){
-	// 		case "Rot": ret += node.indentChars + node.relevantContainer.name + ".rotation.set(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "RotX": ret += node.indentChars + node.relevantContainer.name + ".rotation.x = " + node.args[0] + ";\r\n"; break;
-	// 		case "RotY": ret += node.indentChars + node.relevantContainer.name + ".rotation.y = " + node.args[0] + ";\r\n"; break;
-	// 		case "RotZ": ret += node.indentChars + node.relevantContainer.name + ".rotation.z = " + node.args[0] + ";\r\n"; break;
-
-	// 		case "Scale": ret += node.indentChars + node.relevantContainer.name + ".scale.set(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "ScaleX": ret += node.indentChars + node.relevantContainer.name + ".scale.x = " + node.args[0] + ";\r\n"; break;
-	// 		case "ScaleY": ret += node.indentChars + node.relevantContainer.name + ".scale.y = " + node.args[0] + ";\r\n"; break;
-	// 		case "ScaleZ": ret += node.indentChars + node.relevantContainer.name + ".scale.z = " + node.args[0] + ";\r\n"; break;
-
-	// 		case "Pos": ret += node.indentChars + node.relevantContainer.name + ".position.set(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "PosX": ret += node.indentChars + node.relevantContainer.name + ".position.x = " + node.args[0] + ";\r\n"; break;
-	// 		case "PosY": ret += node.indentChars + node.relevantContainer.name + ".position.y = " + node.args[0] + ";\r\n"; break;
-	// 		case "PosZ": ret += node.indentChars + node.relevantContainer.name + ".position.z = " + node.args[0] + ";\r\n"; break;
-	// 	}
-	// 	return ret;
-	// }
-	
-	// var GeometryModifierTypes = [
-	// 	"Pos",
-	// 	"PosX",
-	// 	"PosY",
-	// 	"PosZ",
-	// 	"Rot",
-	// 	"RotX",
-	// 	"RotY",
-	// 	"RotZ",
-	// 	"Scale",
-	// 	"ScaleX",
-	// 	"ScaleY",
-	// 	"ScaleZ"
-	// ];
-
-	// for(var i = 0; i < GeometryModifierTypes.length; i++){
-	// 	var command = GeometryModifierTypes[i];
-	// 	new MetaPixCommand(command, GeometryModifierCommandParse, GeometryModifierCommandRender);
-	// }
-
-	// var MaterialCommandParse = function(node){
-	// 	node.isMaterial = true;
-	// 	node.parent.material = null;
-	// 	node.parent.defaultMaterial = node;
-	// 	node.allMaterials.push(node);
-	// }
-	// var MaterialCommandRender = function(node){
-	// 	var ret = "";
-	// 	if(!node.name) {
-	// 		node.name = node.nextName("material");
-	// 		if(node.allNames.indexOf(node.name) != -1) throwError(node.block.lineNumber, node.block.indentation.level, "The name `" + node.name + "` was declared twice. Avoid the `material` prefix because it's used internally.", null);
-	// 		node.allNames.push(node.name);
-	// 	}
-	// 	node.allMaterialsByName[node.name] = node;
-	// 	switch(node.command){
-	// 		case "LineMat": ret += node.indentChars + "var " + node.name + " = new THREE.LineBasicMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "DashedMat": ret += node.indentChars + "var " + node.name + " = new THREE.LineDashedMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "MeshMat": ret += node.indentChars + "var " + node.name + " = new THREE.MeshBasicMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "DepthMat": ret += node.indentChars + "var " + node.name + " = new THREE.MeshDepthMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "LambertMat": ret += node.indentChars + "var " + node.name + " = new THREE.MeshLambertMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "NormalMat": ret += node.indentChars + "var " + node.name + " = new THREE.MeshNormalMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "PhongMat": ret += node.indentChars + "var " + node.name + " = new THREE.MeshPhongMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "PhysicalMat": ret += node.indentChars + "var " + node.name + " = new THREE.MeshPhysicalMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "StandardMat": ret += node.indentChars + "var " + node.name + " = new THREE.MeshStandardMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "ToonMat": ret += node.indentChars + "var " + node.name + " = new THREE.MeshToonMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "PointsMat": ret += node.indentChars + "var " + node.name + " = new THREE.PointsMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 		case "ShadowMat": ret += node.indentChars + "var " + node.name + " = new THREE.ShadowMaterial(" + node.args.join(", ") + ");\r\n"; break;
-	// 	}
-	// 	return ret;
-	// }
-	
-	// var MaterialTypes = [
-	// 	"LineMat",
-	// 	"DashedMat",
-	// 	"MeshMat",
-	// 	"DepthMat",
-	// 	"LambertMat",
-	// 	"NormalMat",
-	// 	"PhongMat",
-	// 	"PhysicalMat",
-	// 	"StandardMat",
-	// 	"ToonMat",
-	// 	"PointsMat",
-	// 	"ShadowMat",
-	// 	//"rawshader",
-	// 	"ShaderMat"
-	// 	//"sprite",
-	// ];
-
-	// for(var i = 0; i < MaterialTypes.length; i++){
-	// 	var command = MaterialTypes[i];
-	// 	new MetaPixCommand(command, MaterialCommandParse, MaterialCommandRender);
-	// }
-	
-	// var MaterialModifierCommandParse = function(node){
-	// 	node.isMaterialModifier = true;
-	// 	if(!node.parent.isMaterial){
-	// 		throwError(node.block.lineNumber, 0, "Material modifiers must be nested in a material.", node.block.creationLine);
-	// 	}
-	// }
-	// var MaterialModifierCommandRender = function(node){
-	// 	var ret = "";
-	// 	//ret += node.indentChars + node.parent.name + "." + node.command.toLowerCase() + " = " + node.args[0] + ";\r\n"
-	// 	if(!node.parent) throwError(node.block.lineNumber, node.block.indentation.level, "No parent material found for material modifier."); //TODO: is parent guaranteed to be a material?
-	// 	//TODO: won't work with if statemntes.
-	// 	var fullName = node.parent.name + "." + node.command[0].toLowerCase() + node.command.substring(1);
-	// 	ret += node.indentChars + fullName + ".set ? " + fullName + ".set(" + node.args[0] + ") : " + fullName + " = " + node.args[0] + ";\r\n"
-	// 	return ret;
-	// }
-	
-	// var MaterialModifierTypes = [
-	// 	"Color",
-	// 	"DoubleSided",
-	// 	"Roughness",
-	// 	"Reflectivity",
-	// 	"RefractionRatio",
-	// 	"Skinning",
-	// 	"Wireframe",
-	// 	"WireframeLinecap",
-	// 	"WireframeLinewidth",
-	// 	"WireframeLineJoin",
-	// ];
-
-	// for(var i = 0; i < MaterialModifierTypes.length; i++){
-	// 	var command = MaterialModifierTypes[i];
-	// 	new MetaPixCommand(command, MaterialModifierCommandParse, MaterialModifierCommandRender);
-	// }
-
-	var BooleanCommandParse = function(node){
-		//if(!THREE.CSG) throwError(node.block.lineNumber, 0, "Cannot use boolean operations unless CSG dependency is resolved.", node.block.creationLine);
-		node.isBoolean = true;
-		node.isIntersection = true;
-		node.booleanChildren = [];
-		if(node.parent && !node.parent.isGeometry && !node.parent.isContainer && !node.parent.isFlowControl){
-			throwError(node.block.lineNumber, 0, "Boolead operations must be nested in groups, geometry.", node.block.creationLine);
-		}
-	}
-
-	var BooleanCommandRender = function(node){
-		return node.indentChars + node.parent.name + " = new ThreeBSP(" + node.parent.name + ");\r\n"
-	}
-
-	var BooleanCommandClose = function(node){
-		var ret = "";
-		if(node.booleanChildren) {
-			for(var i = 0; i < node.booleanChildren.length; i++){
-				var cn = node.booleanChildren[i];
-
-				ret += node.indentChars + cn.name + " = new ThreeBSP(" + cn.name + ");\r\n"
-				ret += node.indentChars + node.parent.name + " = " + node.parent.name + "." + cn.parent.command.toLowerCase() + "(" + cn.name + ");\r\n";
-
-				//ret += node.indentChars + node.parent.name + " = THREE.CSG.toGeometry(" + node.parent.name + ");\r\n"
-				//ret += node.indentChars + node.parent.name + ".intersect(new ThreeBSP(" + node.booleanChildren[i].name + "));\r\n"
-			}
-		}
-		ret += node.indentChars + node.parent.name + " = " + node.parent.name + ".toMesh();\r\n"
-		ret += node.indentChars + node.parent.name + ".material = " + node.parent.material + ";\r\n"
-
-		return ret;
-	}
-	
-	var BooleanTypes = [
-		"Intersect", "Subtract", "Union"
-	];
-
-	for(var i = 0; i < BooleanTypes.length; i++){
-		let command = BooleanTypes[i];
-		new MetaPixCommand(command, BooleanCommandParse, BooleanCommandRender, BooleanCommandClose);
 	}
 	
 
@@ -473,8 +371,7 @@ class MetaPixCommand{
 		/*if(!node.name){
 		}*/
 		ret += node.indentChars + "var " + node.name + " = function(" + node.args.join(", ") + "){\r\n";
-		node.name = node.nextName("container");
-		node.allNames.push(node.name);
+		getNameWithPrefix(node, "container");
 		node.indentation = (node.indentation || 0) + 1;
 		ret += node.indentChars + indent + "var " + node.name + " = new PIXI.Container();\r\n"
 		return ret;
@@ -520,39 +417,36 @@ class MetaPixCommand{
 	});
 
 	new MetaPixCommand("Graphics", function(node){
+		validateCommand(node, "Graphics", [], ["x", "y"], ["Container", "Graphics"]);
 		node.isGraphics = true;
-		if(!node.parent || !node.parent.isContainer && !node.parent.isGraphics){
-			throwError(node.block.lineNumber, 0, "Graphics can only go in containers or other graphics.", node.block.creationLine);
-		}
 		node.relevantContainer = node;
 	}, function(node){
 		var ret = "";
-		if(!node.name) {
-			node.name = node.nextName("gfx");
-			if(node.allNames.indexOf(node.name) != -1) throwError(node.block.lineNumber, node.block.indentation.level, "The name `" + node.name + "` was declared twice.", node.block.creationLine);
-			node.allNames.push(node.name);
-		}
-		ret += `${node.indentChars}var ${node.name} = new PIXI.Graphics();\r\n`
+		getNameWithPrefix(node, "gfx");
+		ret += `${node.indentChars}var ${node.name} = new PIXI.Graphics();\r\n`;
 		if(node.relaventParentContainer && node.parent) ret += node.indentChars + node.relaventParentContainer.name + ".addChild(" + node.name + ")\r\n";
 		if(node.args.length == 2) ret += `${node.indentChars}${node.name}.position.set(${node.args.join(", ")});\r\n`;
 		return ret;		
+	}, function(node){
+		let ret = "";
+		ret += drawBoundingBoxIfSelected(node);
+		return ret;
 	});
 
 	new MetaPixCommand("Container", function(node){
+		validateCommand(node, "Container", [], ["x", "y"], ["Container"]);
 		node.isContainer = true;
-		if(!node.parent || !node.parent.isContainer/* || !node.parent.isFlowControl*/){
-			throwError(node.block.lineNumber, 0, "Containers can only exist inside of other containers.", node.block.creationLine);
-		}
 		node.relevantContainer = node;
 	}, function(node){
 		var ret = "";
-		if(!node.name) {
-			node.name = node.nextName("container");
-			if(node.allNames.indexOf(node.name) != -1) throwError(node.block.lineNumber, node.block.indentation.level, "The name `" + node.name + "` was declared twice. Avoid the `group` prefix because it's used internally.", node.block.creationLine);
-			node.allNames.push(node.name);
-		}
+		getNameWithPrefix(node, "container");
 		ret += node.indentChars + "var " + node.name + " = new PIXI.Container();\r\n"
 		if(node.relaventParentContainer && node.parent) ret += node.indentChars + node.relaventParentContainer.name + ".addChild(" + node.name + ")\r\n"
+		if(node.args.length == 2) ret += `${node.indentChars}${node.name}.position.set(${node.args.join(", ")});\r\n`;
+		return ret;
+	}, function(node){
+		let ret = "";
+		ret += drawBoundingBoxIfSelected(node);
 		return ret;
 	});
 
@@ -560,11 +454,7 @@ class MetaPixCommand{
 		node.isAnimation = true;
 	}, function(node){
 		var ret = "";
-		if(!node.name) {
-			node.name = node.nextName("animation");
-			if(node.allNames.indexOf(node.name) != -1) throwError(node.block.lineNumber, node.block.indentation.level, "The name `" + node.name + "` was declared twice.", node.block.creationLine);
-			node.allNames.push(node.name);
-		}
+		getNameWithPrefix(node, "animation");
 		if(noAnimations){
 			noAnimations = false;
 			ret += node.indentChars + "group0.animations = {};\r\n"
@@ -656,6 +546,7 @@ class PixiNode{
 	nameNumbs: any = {};
 	indentChars: string;
 	indentation: any;
+	isShape: boolean;
 
 
 	
@@ -824,11 +715,7 @@ class PixiNode{
 			ret += cmd.render(this);
 		}
 		else if(this.isTemplate){
-			if(!this.name) {
-				this.name = this.nextName("container");
-				if(this.allNames.indexOf(this.name) != -1) throwError(this.block.lineNumber, this.block.indentation.level, "The name `" + this.name + "` was declared twice. Avoid the `group` prefix because it's used internally.", this.block.creationLine);
-				this.allNames.push(this.name);
-			}
+			getNameWithPrefix(this, "container");
 			ret += this.indentChars + "var " + this.name + " = " + this.command + "(" + this.args.join(", ") + ");\r\n"
 			if(this.relaventParentContainer) ret += this.indentChars + this.relaventParentContainer.name + ".addChild(" + this.name + ")\r\n"
 		}

@@ -181,11 +181,6 @@ class MetaPixCommand{
 		["MoveTo", "moveTo", ["x", "y"], []],
 
 		// Drawing Methods (deprecated)
-		["DrawCircle", "drawCircle", ["x", "y", "radius"], []],
-		["DrawEllipse", "drawEllipse", ["x", "y", "width", "height"], []],
-		["DrawPolygon", "drawPolygon", ["path"], []],
-		["DrawRect", "drawRect", ["x", "y", "width", "height"], []],
-		["DrawRoundedRect", "drawRoundedRect", ["x", "y", "width", "height", "radius"], []],
 		["DrawStar", "drawStar", ["x", "y", "points", "radius"], ["innerRadius", "rotation"]],
 	];
 
@@ -239,6 +234,13 @@ class MetaPixCommand{
 		["Polygon", "Polygon", ["path"], []],
 		["Rect", "Rectangle", ["x", "y", "width", "height"], []],
 		["RoundedRect", "RoundedRectangle", ["x", "y", "width", "height", "radius"], []],
+		
+		// Aliases
+		["DrawCircle", "Circle", ["x", "y", "radius"], []],
+		["DrawEllipse", "Ellipse", ["x", "y", "width", "height"], []],
+		["DrawPolygon", "Polygon", ["path"], []],
+		["DrawRect", "Rectangle", ["x", "y", "width", "height"], []],
+		["DrawRoundedRect", "RoundedRectangle", ["x", "y", "width", "height", "radius"], []],
 		//["Star", "drawStar", ["x", "y", "points", "radius"], ["innerRadius", "rotation"]],
 	];
 

@@ -87,6 +87,8 @@ class Block {
 	children: Block[] = [];
 	indentation: { level: number; type: string; };
 	isSelected: boolean = false;
+	cursorY: number = 0;
+	cursorX: number = 0;
 	
 	constructor(indentation: { level: number; type: string; }, creationLine:string, lineNumber:number, isSelected:boolean){
 		this.indentation = indentation ?? {level: 0, type: "none"};
@@ -144,14 +146,51 @@ class MetaPixCommand{
 	
 	function drawBoundingBoxIfSelected(node: PixiNode){
 		if(node.block.isSelected){
-			return [
-				"",
-				`var _boundingBoxRect = new PIXI.Graphics();`, 
-				`_boundingBoxRect.lineStyle(1, 0x6666FF, 0.6);`, 
-				`_boundingBoxRect.drawShape(${node.name}.getBounds ? ${node.name}.getBounds() : ${node.name});`,
-				`container0.addChild(_boundingBoxRect)`, 
-				""
-			].join(`\r\n${node.indentChars}`);
+			switch(node.command){
+				case "Container":
+				case "Graphics":
+				case "Ellipse":
+				case "DrawEllipse":
+				case "Circle":
+				case "DrawCircle":
+				case "Rect":
+				case "DrawRect":
+				case "RoundedRect":
+				case "DrawRoundedRect":
+					return [
+						"",
+						`var _boundingBoxRect = new PIXI.Graphics();`, 
+						`_boundingBoxRect.lineStyle(1, 0x6666FF, 0.6);`, 
+						`_boundingBoxRect.drawShape(${node.name}.getBounds ? ${node.name}.getBounds() : ${node.name});`,
+						`container0.addChild(_boundingBoxRect)`, 
+						""
+					].join(`\r\n${node.indentChars}`);
+				case "Arc":{
+					return [
+						"",
+						`var _boundingBoxRect = new PIXI.Graphics();`, 
+						`var _boundingBoxPosition = ${node.parent.name}.getGlobalPosition();`,
+						`_boundingBoxRect.lineStyle(1, 0x6666FF, 0.6);`, 
+						`_boundingBoxRect.drawRect(_boundingBoxPosition.x+${node.args[0]}-${node.args[2]},_boundingBoxPosition.y+${node.args[1]}-${node.args[2]},${Number(node.args[2])*2},${Number(node.args[2])*2});`,
+						`container0.addChild(_boundingBoxRect)`, 
+						""
+					].join(`\r\n${node.indentChars}`);
+				}
+				case "LineTo":
+				case "MoveTo":{
+					return [
+						"",
+						`var _boundingBoxArrow = new PIXI.Graphics();`, 
+						`var _boundingBoxPosition = ${node.parent.name}.getGlobalPosition();`,
+						`_boundingBoxArrow.lineStyle(2, 0x6666FF, 1);`, 
+						`_boundingBoxArrow.moveTo(_boundingBoxPosition.x+${node.parent.block.cursorX},_boundingBoxPosition.y+${node.parent.block.cursorY});`,
+						`_boundingBoxArrow.lineTo(_boundingBoxPosition.x+${node.args[0]},_boundingBoxPosition.y+${node.args[1]});`,
+						`container0.addChild(_boundingBoxArrow)`, 
+						""
+					].join(`\r\n${node.indentChars}`);
+				}
+				default: return "";
+			}
 		}
 
 		return "";
@@ -225,7 +264,17 @@ class MetaPixCommand{
 			ret += `${node.indentChars}${node.parent.name}.${command[1]}( ${node.args.join(", ")} );\r\n`
 	
 			return ret;
-		}, null/*GeometryCommandClose*/);
+		}, node=>{
+			let ret = "";
+			ret += drawBoundingBoxIfSelected(node);
+
+			if(node.command == "MoveTo" || node.command == "LineTo"){
+				node.parent.block.cursorX = Number(node.args[0]);
+				node.parent.block.cursorY = Number(node.args[1]);
+			}
+
+			return ret;
+		});
 	}
 
 	var shapes = [

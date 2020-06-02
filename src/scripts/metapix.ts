@@ -355,7 +355,7 @@ class MetaPixCommand{
 			//ret += node.indentChars + "" + node.parent.name + ".beginFill(0xe74c3c); // Red\r\n"
 
 			if(command[2] == "angle"){
-				node.args[0] = "" + (Number(node.args[0]) * Math.PI / 180);
+				node.args[0] = "" + (isNaN(node.args[0]) ? node.args[0] + "Math.PI / 180" : node.args[0] * Math.PI / 180);
 			}
 
 			ret += `${node.indentChars}${node.parent.name}.${command[1]} = ${node.args[0]};\r\n`

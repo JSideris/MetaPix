@@ -245,13 +245,13 @@ class MetaPixCommand{
 			// Rads to degs.
 			switch(command[1]){
 				case "arc":
-					node.args[3] =(isNaN(node.args[3]) ? node.args[3] + " * Math.PI / 180" : node.args[3] * Math.PI / 180)
-					node.args[4] =(isNaN(node.args[4]) ? node.args[4] + " * Math.PI / 180" : node.args[4] * Math.PI / 180)
+					node.args[3] = (isNaN(node.args[3]) ? "(" + node.args[3] + ") * Math.PI / 180" : node.args[3] * Math.PI / 180)
+					node.args[4] = (isNaN(node.args[4]) ? "(" + node.args[4] + ") * Math.PI / 180" : node.args[4] * Math.PI / 180)
 					break;
 				case "drawStar":
 					if(node.args.length > 5)
 						node.args[5] = "" + (Number(node.args[5]) * Math.PI / 180);
-						node.args[5] =(isNaN(node.args[5]) ? node.args[5] + " * Math.PI / 180" : node.args[5] * Math.PI / 180)
+						node.args[5] = (isNaN(node.args[5]) ? "(" + node.args[5] + " * Math.PI / 180)" : node.args[5] * Math.PI / 180)
 					break;
 			}
 
@@ -356,7 +356,7 @@ class MetaPixCommand{
 			//ret += node.indentChars + "" + node.parent.name + ".beginFill(0xe74c3c); // Red\r\n"
 
 			if(command[2] == "angle"){
-				node.args[0] = "" + (isNaN(node.args[0]) ? node.args[0] + " * Math.PI / 180" : node.args[0] * Math.PI / 180);
+				node.args[0] = "" + (isNaN(node.args[0]) ? "(" + node.args[0] + ") * Math.PI / 180" : node.args[0] * Math.PI / 180);
 			}
 
 			ret += `${node.indentChars}${node.parent.name}.${command[1]} = ${node.args[0]};\r\n`

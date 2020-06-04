@@ -245,12 +245,13 @@ class MetaPixCommand{
 			// Rads to degs.
 			switch(command[1]){
 				case "arc":
-					node.args[3] = "" + (Number(node.args[3]) * Math.PI / 180);
-					node.args[4] = "" + (Number(node.args[4]) * Math.PI / 180);
+					node.args[3] =(isNaN(node.args[3]) ? node.args[3] + " * Math.PI / 180" : node.args[3] * Math.PI / 180)
+					node.args[4] =(isNaN(node.args[4]) ? node.args[4] + " * Math.PI / 180" : node.args[4] * Math.PI / 180)
 					break;
 				case "drawStar":
 					if(node.args.length > 5)
-					node.args[5] = "" + (Number(node.args[5]) * Math.PI / 180);
+						node.args[5] = "" + (Number(node.args[5]) * Math.PI / 180);
+						node.args[5] =(isNaN(node.args[5]) ? node.args[5] + " * Math.PI / 180" : node.args[5] * Math.PI / 180)
 					break;
 			}
 
